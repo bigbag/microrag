@@ -1,0 +1,224 @@
+.PHONY: help
+
+#################################################################################
+# GLOBALS                                                                       #
+#################################################################################
+
+PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+PROJECT_NAME = microrag
+
+SRC_PATH = src/microrag
+LINT_PATHS = src tests
+
+VENV := $(or ${VIRTUAL_ENV},${VIRTUAL_ENV},.venv)
+PYTHON = $(VENV)/bin/python
+PIP = $(VENV)/bin/pip
+UV = $(VENV)/bin/uv
+
+PYTHON_VERSION = 3.12
+PYTHONPATH := $(or ${PYTHONPATH},${PYTHONPATH},.)
+
+export ${PYTHONPATH}
+
+#######################
+### System commands
+#######################
+.PHONY: sys/changelog
+## Generating changelog file
+sys/changelog:
+	@echo "Generating CHANGELOG.md..."
+	@echo "" > CHANGELOG.md;
+	@previous_tag=0; \
+	for current_tag in $$(git tag --sort=-creatordate | grep '^v'); do \
+		if [ "$$previous_tag" != 0 ]; then \
+			tag_date=$$(git log -1 --pretty=format:'%ad' --date=short $${previous_tag}); \
+			printf "\n## $${previous_tag} ($${tag_date})\n\n" >> CHANGELOG.md; \
+			git log $${current_tag}...$${previous_tag} --pretty=format:'*  %s [%an]' --reverse | grep -v Merge >> CHANGELOG.md; \
+			printf "\n" >> CHANGELOG.md; \
+		fi; \
+		previous_tag=$${current_tag}; \
+	done
+	@echo "CHANGELOG.md generated successfully."
+
+.PHONY: sys/tag
+## Create and push tag
+sys/tag:
+	@read -p "Enter tag version (e.g., 1.0.0): " TAG; \
+	if [[ $$TAG =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]]; then \
+		git tag -a v$$TAG -m v$$TAG; \
+		git push origin v$$TAG; \
+		echo "Tag v$$TAG created and pushed successfully."; \
+	else \
+		echo "Invalid tag format. Please use X.Y.Z (e.g., 1.0.0)"; \
+		exit 1; \
+	fi
+
+#######################
+### Virtual environment
+#######################
+
+.PHONY: venv/create
+venv/create: ## Create virtual environment
+	@echo "create virtual environment..."
+	python -m venv ${VENV}
+	@echo "done"
+	@echo
+
+.PHONY: venv/install/main
+## Install main dependencies
+venv/install/main:
+	@echo "install virtual environment..."
+	$(PIP) install uv
+	$(UV) sync --no-group dev
+
+.PHONY: venv/install/all
+## Install all dependencies
+venv/install/all:
+	@echo "install virtual environment..."
+	$(PIP) install uv
+	$(UV) sync --all-groups
+
+#################################################################################
+# COMMANDS                                                                      #
+#################################################################################
+
+########################################
+### Code style & formatting tools
+########################################
+
+.PHONY: lint/ruff
+lint/ruff:
+	@echo "linting using ruff..."
+	uv run ruff format --check $(LINT_PATHS)
+	uv run ruff check $(LINT_PATHS)
+	@echo "done"
+	@echo
+
+.PHONY: lint/mypy
+lint/mypy:
+	@echo "type checking using mypy..."
+	uv run mypy $(SRC_PATH)
+	@echo "done"
+	@echo
+
+.PHONY: lint
+## Run all linters
+lint: lint/ruff lint/mypy
+
+.PHONY: format
+## Format source code
+format:
+	@echo "formatting using ruff..."
+	uv run ruff format $(LINT_PATHS)
+	uv run ruff check --fix $(LINT_PATHS)
+	@echo "done"
+	@echo
+
+.PHONY: clean
+## Delete all compiled Python files and caches
+clean:
+	@echo "Clear cache directories"
+	rm -rf .mypy_cache .pytest_cache .coverage
+	@rm -rf `find . -name __pycache__`
+	@rm -rf `find . -type f -name '*.py[co]' `
+	@rm -rf `find . -type f -name '*~' `
+	@rm -rf `find . -type f -name '.*~' `
+	@rm -rf `find . -type f -name '@*' `
+	@rm -rf `find . -type f -name '#*#' `
+	@rm -rf `find . -type f -name '*.orig' `
+	@rm -rf `find . -type f -name '*.rej' `
+	@rm -rf .coverage
+	@rm -rf coverage.html
+	@rm -rf coverage.xml
+	@rm -rf htmlcov
+	@rm -rf build
+	@rm -rf cover
+	@rm -rf .develop
+	@rm -rf .flake
+	@rm -rf .install-deps
+	@rm -rf *.egg-info
+	@rm -rf .pytest_cache
+	@rm -rf .ruff_cache
+	@rm -rf .mypy_cache
+	@rm -rf dist
+	@rm -rf test-reports
+
+
+####################
+### Tests
+####################
+
+.PHONY: test
+## Run all tests with coverage
+test:
+	uv run pytest --cov=$(SRC_PATH) --cov-report=term-missing
+
+####################
+### Examples
+####################
+
+.PHONY: example
+## Run example: make example name=basic_usage
+example:
+	uv run python examples/$(name).py
+
+#################################################################################
+# Self Documenting Commands                                                     #
+#################################################################################
+
+.DEFAULT_GOAL := help
+
+# Inspired by <http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html>
+# sed script explained:
+# /^##/:
+# 	* save line in hold space
+# 	* purge line
+# 	* Loop:
+# 		* append newline + line to hold space
+# 		* go to next line
+# 		* if line starts with doc comment, strip comment character off and loop
+# 	* remove target prerequisites
+# 	* append hold space (+ newline) to line
+# 	* replace newline plus comments by `---`
+# 	* print line
+# Separate expressions are necessary because labels cannot be delimited by
+# semicolon; see <http://stackoverflow.com/a/11799865/1968>
+.PHONY: help
+help:
+	@echo "$$(tput bold)Available rules:$$(tput sgr0)"
+	@echo
+	@sed -n -e "/^## / { \
+		h; \
+		s/.*//; \
+		:doc" \
+		-e "H; \
+		n; \
+		s/^## //; \
+		t doc" \
+		-e "s/:.*//; \
+		G; \
+		s/\\n## /---/; \
+		s/\\n/ /g; \
+		p; \
+	}" ${MAKEFILE_LIST} \
+	| LC_ALL='C' sort --ignore-case \
+	| awk -F '---' \
+		-v ncol=$$(tput cols) \
+		-v indent=19 \
+		-v col_on="$$(tput setaf 6)" \
+		-v col_off="$$(tput sgr0)" \
+	'{ \
+		printf "%s%*s%s ", col_on, -indent, $$1, col_off; \
+		n = split($$2, words, " "); \
+		line_length = ncol - indent; \
+		for (i = 1; i <= n; i++) { \
+			line_length -= length(words[i]) + 1; \
+			if (line_length <= 0) { \
+				line_length = ncol - indent - length(words[i]) - 1; \
+				printf "\n%*s ", -indent, " "; \
+			} \
+			printf "%s ", words[i]; \
+		} \
+		printf "\n"; \
+	}' \
+	| more $(shell test $(shell uname) = Darwin && echo '--no-init --raw-control-chars')
