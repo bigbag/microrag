@@ -4,7 +4,7 @@ A feature-rich, universal RAG library for Python with ONNX-backed embeddings and
 
 ## Features
 
-- **[ONNX](https://onnx.ai)-backed embeddings** - CPU-optimized inference using sentence-transformers with ONNX runtime
+- **Flexible embedding backends** - Choose between [sentence-transformers](https://sbert.net/) (ONNX-optimized) or [FastEmbed](https://github.com/qdrant/fastembed) (lightweight)
 - **[DuckDB](https://duckdb.org) storage** - Persistent vector storage with HNSW indexes for fast similarity search
 - **Three-tier hybrid search** - Combines semantic, BM25, and full-text search with RRF fusion
 - **Query preprocessing** - Abbreviation expansion and stopword removal for better search
@@ -23,23 +23,32 @@ MicroRAG uses [ONNX](https://onnx.ai) (Open Neural Network Exchange) format for 
 ## Installation
 
 ```bash
-# Install with pip
+# Core (no embedding backend - bring your own)
 pip install microrag
 
-# Or install with uv
-uv add microrag
+# With sentence-transformers backend (ONNX-optimized)
+pip install microrag[sentence-transformers]
 
-# For CPU-only PyTorch (recommended for smaller installs)
-uv add microrag --extra cpu
+# With FastEmbed backend (lightweight, fast)
+pip install microrag[fastembed]
+
+# All backends
+pip install microrag[all]
+
+# For CPU-only PyTorch (with sentence-transformers)
+pip install microrag[sentence-transformers,cpu]
 ```
 
 ## Quick Start
+
+### With sentence-transformers (local model)
 
 ```python
 from microrag import MicroRAG, RAGConfig
 
 config = RAGConfig(
     model_path="/path/to/all-MiniLM-L6-v2",
+    embedding_backend="sentence-transformers",  # or "auto"
     db_path="./rag.duckdb",
     embedding_dim=384,
 )
@@ -58,6 +67,22 @@ with MicroRAG(config) as rag:
     results = rag.search("neural networks", top_k=5)
     for r in results:
         print(f"{r.score:.3f}: {r.content}")
+```
+
+### With FastEmbed (auto-download)
+
+```python
+from microrag import MicroRAG, RAGConfig
+
+config = RAGConfig(
+    model_path="BAAI/bge-small-en-v1.5",  # Model name, auto-downloaded
+    embedding_backend="fastembed",
+)
+
+with MicroRAG(config) as rag:
+    rag.add_documents(["Machine learning is a subset of AI."])
+    rag.build_index()
+    results = rag.search("neural networks")
 ```
 
 ## Search Pipeline
@@ -127,8 +152,9 @@ By combining all three with RRF fusion, MicroRAG achieves better recall and prec
 from microrag import RAGConfig
 
 config = RAGConfig(
-    # Required
-    model_path="/path/to/model",      # Sentence-transformer model path
+    # Embedding
+    model_path="/path/to/model",      # Model path or name
+    embedding_backend="auto",         # "auto", "sentence-transformers", "fastembed"
 
     # Storage
     db_path=":memory:",               # DuckDB path (":memory:" for in-memory)
@@ -155,11 +181,13 @@ config = RAGConfig(
 
 ### Configuration Options
 
-**Required:**
-- `model_path` (str) - Path to sentence-transformer model
+**Embedding:**
+- `model_path` (str) - Model path (sentence-transformers) or model name (fastembed)
+- `embedding_backend` (str, default: "auto") - Backend: "auto", "sentence-transformers", "fastembed"
+- `model_file` (str, default: None) - ONNX filename (sentence-transformers only)
+- `fastembed_cache_dir` (str, default: None) - Cache directory (fastembed only)
 
 **Storage:**
-- `model_file` (str, default: None) - ONNX model filename (for quantized models)
 - `db_path` (str, default: `:memory:`) - DuckDB database path
 - `embedding_dim` (int, default: 384) - Embedding vector dimension
 

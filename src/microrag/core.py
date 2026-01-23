@@ -5,7 +5,7 @@ from types import TracebackType
 from typing import Any
 
 from microrag.config import RAGConfig
-from microrag.embedding import EmbeddingModel
+from microrag.embedding import IEmbeddingModel, create_embedding_model
 from microrag.exceptions import DocumentError, MicroRAGError
 from microrag.models import Document, SearchResult
 from microrag.query_processor import QueryProcessor
@@ -42,7 +42,7 @@ class MicroRAG:
     def __init__(self, config: RAGConfig) -> None:
         self._config = config
         self._storage: DuckDBStorage | None = None
-        self._embedding_model: EmbeddingModel | None = None
+        self._embedding_model: IEmbeddingModel | None = None
         self._query_processor: QueryProcessor | None = None
         self._searcher: HybridSearcher | None = None
         self._documents: list[Document] = []
@@ -77,13 +77,15 @@ class MicroRAG:
         return self._storage
 
     @property
-    def embedding_model(self) -> EmbeddingModel:
+    def embedding_model(self) -> IEmbeddingModel:
         """Get or create the embedding model."""
         if self._embedding_model is None:
-            self._embedding_model = EmbeddingModel(
+            self._embedding_model = create_embedding_model(
+                backend=self._config.embedding_backend,
                 model_path=self._config.model_path,
                 model_file=self._config.model_file,
                 batch_size=self._config.batch_size,
+                cache_dir=self._config.fastembed_cache_dir,
             )
         return self._embedding_model
 

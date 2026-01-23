@@ -11,8 +11,10 @@ class RAGConfig:
     """Configuration for MicroRAG instance.
 
     Attributes:
-        model_path: Path to sentence-transformer model directory.
-        model_file: ONNX model filename within model_path (for quantized models).
+        model_path: Model path (sentence-transformers) or model name (fastembed).
+        embedding_backend: Embedding backend ("auto", "sentence-transformers", "fastembed").
+        model_file: ONNX model filename within model_path (sentence-transformers only).
+        fastembed_cache_dir: Cache directory for fastembed models.
         db_path: DuckDB database path. Use ":memory:" for in-memory database.
         embedding_dim: Dimension of embedding vectors.
         chunk_size: Maximum size of text chunks in characters.
@@ -29,8 +31,10 @@ class RAGConfig:
         batch_size: Batch size for embedding generation.
     """
 
-    model_path: str
+    model_path: str = ""
+    embedding_backend: str = "auto"
     model_file: str | None = None
+    fastembed_cache_dir: str | None = None
     db_path: str = ":memory:"
     embedding_dim: int = 384
     chunk_size: int = 1000
@@ -47,8 +51,9 @@ class RAGConfig:
     batch_size: int = 32
 
     def __post_init__(self) -> None:
-        if not self.model_path:
-            raise ValueError("model_path is required")
+        valid_backends = ("auto", "sentence-transformers", "fastembed")
+        if self.embedding_backend not in valid_backends:
+            raise ValueError(f"embedding_backend must be one of {valid_backends}")
         if self.embedding_dim <= 0:
             raise ValueError("embedding_dim must be positive")
         if self.chunk_size <= 0:
@@ -66,7 +71,9 @@ class RAGConfig:
         """Create a new config with updated values."""
         current: dict[str, Any] = {
             "model_path": self.model_path,
+            "embedding_backend": self.embedding_backend,
             "model_file": self.model_file,
+            "fastembed_cache_dir": self.fastembed_cache_dir,
             "db_path": self.db_path,
             "embedding_dim": self.embedding_dim,
             "chunk_size": self.chunk_size,

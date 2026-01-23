@@ -1,5 +1,14 @@
 """Embedding module for MicroRAG."""
 
-from microrag.embedding.model import EmbeddingModel
+from microrag.embedding.base import IEmbeddingModel
+from microrag.embedding.factory import create_embedding_model, get_available_backends
 
-__all__ = ["EmbeddingModel"]
+# Backward compatibility alias
+EmbeddingModel = IEmbeddingModel
+
+__all__ = [
+    "IEmbeddingModel",
+    "EmbeddingModel",
+    "create_embedding_model",
+    "get_available_backends",
+]

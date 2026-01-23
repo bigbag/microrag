@@ -1,16 +1,33 @@
-"""ONNX-backed embedding model using sentence-transformers."""
+"""Sentence-transformers embedding backend with ONNX support."""
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import NDArray
-from sentence_transformers import SentenceTransformer
 
+from microrag.embedding.base import IEmbeddingModel
 from microrag.exceptions import EmbeddingError
 
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
-class EmbeddingModel:
+
+def _import_sentence_transformers() -> Any:
+    """Import sentence-transformers with helpful error message."""
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        return SentenceTransformer
+    except ImportError as e:
+        raise ImportError(
+            "sentence-transformers is not installed. "
+            "Install it with: pip install microrag[sentence-transformers]"
+        ) from e
+
+
+class SentenceTransformerModel(IEmbeddingModel):
     """Embedding model using sentence-transformers with ONNX backend.
 
     This class wraps sentence-transformers to provide ONNX-optimized
@@ -28,20 +45,22 @@ class EmbeddingModel:
         model_file: str | None = None,
         batch_size: int = 32,
     ) -> None:
+        if not model_path:
+            raise ValueError("model_path is required for sentence-transformers backend")
         self._model_path = Path(model_path)
         self._model_file = model_file
         self._batch_size = batch_size
         self._model: SentenceTransformer | None = None
 
-    def _load_model(self) -> SentenceTransformer:
+    def _load_model(self) -> "SentenceTransformer":
         """Load the sentence-transformer model with ONNX backend."""
         if self._model is not None:
             return self._model
 
+        SentenceTransformer = _import_sentence_transformers()
         model_path = str(self._model_path)
 
         try:
-            # Load with ONNX backend
             model_kwargs: dict[str, dict[str, str]] = {}
 
             if self._model_file:
@@ -57,7 +76,7 @@ class EmbeddingModel:
             raise EmbeddingError(f"Failed to load model from {model_path}: {e}") from e
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self) -> "SentenceTransformer":
         """Get the loaded model, loading it if necessary."""
         return self._load_model()
 

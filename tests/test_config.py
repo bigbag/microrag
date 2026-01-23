@@ -12,20 +12,30 @@ class TestRAGConfig:
         """Test creating config with various fields."""
         config = RAGConfig(
             model_path="/path/to/model",
+            embedding_backend="sentence-transformers",
             model_file="model.onnx",
+            fastembed_cache_dir="/cache",
             db_path="./test.duckdb",
             embedding_dim=768,
             abbreviations={"ML": "machine learning"},
         )
         assert config.model_path == "/path/to/model"
+        assert config.embedding_backend == "sentence-transformers"
         assert config.model_file == "model.onnx"
+        assert config.fastembed_cache_dir == "/cache"
         assert config.embedding_dim == 768
         assert config.abbreviations == {"ML": "machine learning"}
 
-    def test_empty_model_path_raises_error(self):
-        """Test that empty model_path raises ValueError."""
-        with pytest.raises(ValueError, match="model_path is required"):
-            RAGConfig(model_path="")
+    def test_default_embedding_backend(self):
+        """Test that embedding_backend defaults to 'auto'."""
+        config = RAGConfig()
+        assert config.embedding_backend == "auto"
+        assert config.model_path == ""
+
+    def test_invalid_embedding_backend_raises_error(self):
+        """Test that invalid embedding_backend raises ValueError."""
+        with pytest.raises(ValueError, match="embedding_backend must be one of"):
+            RAGConfig(model_path="/path", embedding_backend="invalid")
 
     def test_invalid_embedding_dim_raises_error(self):
         """Test that non-positive embedding_dim raises ValueError."""
