@@ -1,9 +1,12 @@
 """Query preprocessing for MicroRAG."""
 
+import logging
 import re
 from collections.abc import Sequence
 
 from microrag.stopwords import ENGLISH_STOPWORDS
+
+logger = logging.getLogger(__name__)
 
 
 class QueryProcessor:
@@ -63,14 +66,21 @@ class QueryProcessor:
         if not self._abbreviations:
             return text
 
+        expanded_words = []
+
         def replace_abbrev(match: re.Match[str]) -> str:
             word = match.group(1)
             lower_word = word.lower()
             if lower_word in self._abbrev_lookup:
-                return self._abbrev_lookup[lower_word]
+                expansion = self._abbrev_lookup[lower_word]
+                expanded_words.append((word, expansion))
+                return expansion
             return word
 
-        return self._WORD_PATTERN.sub(replace_abbrev, text)
+        result = self._WORD_PATTERN.sub(replace_abbrev, text)
+        if expanded_words:
+            logger.debug("Expanded abbreviations: %s", expanded_words)
+        return result
 
     def tokenize(self, text: str) -> list[str]:
         """Tokenize text for BM25 search.
@@ -100,8 +110,11 @@ class QueryProcessor:
         Returns:
             Processed query ready for embedding.
         """
+        logger.debug("Processing query: %r", query)
         normalized = self.normalize(query)
         expanded = self.expand_abbreviations(normalized)
+        if expanded != query:
+            logger.debug("Query transformed: %r -> %r", query, expanded)
         return expanded
 
     def process_for_bm25(self, query: str) -> list[str]:

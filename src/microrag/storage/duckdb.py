@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from numpy.typing import NDArray
 from microrag.exceptions import StorageError
 from microrag.models import Document
 from microrag.storage.base import IStorageAdapter
+
+logger = logging.getLogger(__name__)
 
 
 class DuckDBStorage(IStorageAdapter):
@@ -38,6 +41,11 @@ class DuckDBStorage(IStorageAdapter):
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._vector_index_built = False
         self._fts_index_built = False
+        logger.debug(
+            "DuckDBStorage initialized: db_path=%s, embedding_dim=%d",
+            db_path,
+            embedding_dim,
+        )
 
     def _get_connection(self) -> duckdb.DuckDBPyConnection:
         """Get or create database connection."""
@@ -49,8 +57,10 @@ class DuckDBStorage(IStorageAdapter):
             if self._db_path != ":memory:":
                 Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
 
+            logger.debug("Connecting to DuckDB: %s", self._db_path)
             self._conn = duckdb.connect(self._db_path)
             self._init_schema()
+            logger.info("DuckDB connection established: %s", self._db_path)
             return self._conn
         except Exception as e:
             raise StorageError(f"Failed to connect to DuckDB: {e}") from e
@@ -66,6 +76,7 @@ class DuckDBStorage(IStorageAdapter):
         if conn is None:
             return
 
+        logger.debug("Initializing DuckDB schema and extensions")
         # Install and load required extensions
         conn.execute("INSTALL vss")
         conn.execute("LOAD vss")
@@ -91,6 +102,7 @@ class DuckDBStorage(IStorageAdapter):
         if not documents:
             return
 
+        logger.debug("Storing %d document(s) in DuckDB", len(documents))
         conn = self.conn
         try:
             for doc in documents:
@@ -111,6 +123,7 @@ class DuckDBStorage(IStorageAdapter):
             # Invalidate indexes after adding documents
             self._vector_index_built = False
             self._fts_index_built = False
+            logger.debug("Documents stored successfully")
 
         except Exception as e:
             raise StorageError(f"Failed to add documents: {e}") from e
@@ -198,6 +211,12 @@ class DuckDBStorage(IStorageAdapter):
     ) -> None:
         """Build HNSW vector index for similarity search."""
         try:
+            logger.info(
+                "Building HNSW vector index: ef_construction=%d, ef_search=%d, m=%d",
+                ef_construction,
+                ef_search,
+                m,
+            )
             conn = self.conn
 
             # Drop existing index if any
@@ -216,12 +235,14 @@ class DuckDBStorage(IStorageAdapter):
             """)
 
             self._vector_index_built = True
+            logger.debug("HNSW vector index built")
         except Exception as e:
             raise StorageError(f"Failed to build vector index: {e}") from e
 
     def build_fts_index(self) -> None:
         """Build full-text search index."""
         try:
+            logger.info("Building FTS index")
             conn = self.conn
 
             # Create FTS index using PRAGMA
@@ -239,10 +260,12 @@ class DuckDBStorage(IStorageAdapter):
             """)
 
             self._fts_index_built = True
+            logger.debug("FTS index built")
         except Exception as e:
             # FTS index might already exist - that's ok
             if "already exists" not in str(e).lower():
                 raise StorageError(f"Failed to build FTS index: {e}") from e
+            logger.debug("FTS index already exists")
             self._fts_index_built = True
 
     def vector_search(
@@ -252,6 +275,7 @@ class DuckDBStorage(IStorageAdapter):
     ) -> list[tuple[str, float]]:
         """Search by vector similarity using HNSW index."""
         try:
+            logger.debug("Performing vector search, top_k=%d", top_k)
             embedding_list = query_embedding.tolist()
 
             # Use array_cosine_similarity for similarity search
@@ -267,7 +291,9 @@ class DuckDBStorage(IStorageAdapter):
                 [embedding_list, top_k],
             ).fetchall()
 
-            return [(row[0], float(row[1])) for row in results]
+            result_list = [(row[0], float(row[1])) for row in results]
+            logger.debug("Vector search returned %d result(s)", len(result_list))
+            return result_list
         except Exception as e:
             raise StorageError(f"Failed to perform vector search: {e}") from e
 
@@ -281,6 +307,7 @@ class DuckDBStorage(IStorageAdapter):
             return []
 
         try:
+            logger.debug("Performing FTS search: query=%r, top_k=%d", query, top_k)
             results = self.conn.execute(
                 """
                 SELECT id, fts_main_documents.match_bm25(id, ?) as score
@@ -292,15 +319,19 @@ class DuckDBStorage(IStorageAdapter):
                 [query, top_k],
             ).fetchall()
 
-            return [(row[0], float(row[1])) for row in results]
+            result_list = [(row[0], float(row[1])) for row in results]
+            logger.debug("FTS search returned %d result(s)", len(result_list))
+            return result_list
         except Exception as e:
             # FTS might not be built or query might be empty after stemming
             if "no such function" in str(e).lower() or "fts" in str(e).lower():
+                logger.debug("FTS search unavailable or returned no results")
                 return []
             raise StorageError(f"Failed to perform FTS search: {e}") from e
 
     def close(self) -> None:
         """Close storage connection and release resources."""
+        logger.debug("Closing DuckDB connection")
         if self._conn is not None:
             with contextlib.suppress(Exception):
                 self._conn.close()

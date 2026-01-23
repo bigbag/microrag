@@ -1,5 +1,6 @@
 """Hybrid search with RRF fusion."""
 
+import logging
 from collections.abc import Sequence
 
 from microrag.embedding import EmbeddingModel
@@ -7,6 +8,8 @@ from microrag.models import Document, SearchResult
 from microrag.query_processor import QueryProcessor
 from microrag.search.bm25 import BM25Index
 from microrag.storage.base import IStorageAdapter
+
+logger = logging.getLogger(__name__)
 
 
 class HybridSearcher:
@@ -48,6 +51,7 @@ class HybridSearcher:
         Args:
             documents: Sequence of documents to index.
         """
+        logger.debug("Building BM25 index for %d document(s)", len(documents))
         doc_ids = [doc.id for doc in documents]
         doc_contents = [doc.content for doc in documents]
         self._bm25_index.build(doc_ids, doc_contents)
@@ -72,21 +76,25 @@ class HybridSearcher:
         """
         # Process query
         processed_query = self._query_processor.process(query)
+        logger.debug("Processed query: %r -> %r", query, processed_query)
 
         # Get query embedding
         query_embedding = self._embedding_model.encode_single(processed_query)
 
         # Semantic search
         semantic_results = self._storage.vector_search(query_embedding, top_k=top_k * 2)
+        logger.debug("Semantic search returned %d result(s)", len(semantic_results))
 
         if not hybrid_enabled:
             return self._to_search_results(semantic_results, top_k, similarity_threshold)
 
         # BM25 search
         bm25_results = self._bm25_index.search(processed_query, top_k=top_k * 2)
+        logger.debug("BM25 search returned %d result(s)", len(bm25_results))
 
         # FTS search
         fts_results = self._storage.fts_search(processed_query, top_k=top_k * 2)
+        logger.debug("FTS search returned %d result(s)", len(fts_results))
 
         # Fuse results using RRF
         fused_scores = self._rrf_fusion(
@@ -97,6 +105,7 @@ class HybridSearcher:
 
         # Sort by fused score
         sorted_results = sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+        logger.debug("RRF fusion produced %d unique document(s)", len(sorted_results))
 
         return self._to_search_results(sorted_results[:top_k], top_k, similarity_threshold)
 

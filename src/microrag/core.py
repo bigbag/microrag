@@ -1,5 +1,6 @@
 """Core MicroRAG class."""
 
+import logging
 from collections.abc import Sequence
 from types import TracebackType
 from typing import Any
@@ -12,6 +13,8 @@ from microrag.query_processor import QueryProcessor
 from microrag.search.hybrid import HybridSearcher
 from microrag.storage import DuckDBStorage
 from microrag.utils import chunk_text, generate_id, normalize_document_input
+
+logger = logging.getLogger(__name__)
 
 
 class MicroRAG:
@@ -47,6 +50,7 @@ class MicroRAG:
         self._searcher: HybridSearcher | None = None
         self._documents: list[Document] = []
         self._index_built = False
+        logger.debug("MicroRAG initialized with db_path=%s", config.db_path)
 
     def __enter__(self) -> "MicroRAG":
         """Enter context manager."""
@@ -135,6 +139,7 @@ class MicroRAG:
             List of document IDs that were added.
         """
         doc_ids = []
+        logger.info("Adding %d document(s), chunk=%s", len(documents), chunk)
 
         for doc in documents:
             try:
@@ -175,6 +180,7 @@ class MicroRAG:
                 doc_ids.append(final_id)
 
         self._index_built = False
+        logger.debug("Added %d document(s): %s", len(doc_ids), doc_ids[:5])
         return doc_ids
 
     def build_index(self) -> None:
@@ -190,12 +196,16 @@ class MicroRAG:
         Must be called after add_documents() and before search().
         """
         if not self._documents:
+            logger.debug("No documents to index")
             return
+
+        logger.info("Building index for %d document(s)", len(self._documents))
 
         # Generate embeddings for documents without them
         docs_needing_embeddings = [d for d in self._documents if d.embedding is None]
 
         if docs_needing_embeddings:
+            logger.debug("Generating embeddings for %d document(s)", len(docs_needing_embeddings))
             contents = [d.content for d in docs_needing_embeddings]
             embeddings = self.embedding_model.encode(contents)
 
@@ -219,6 +229,7 @@ class MicroRAG:
         self.searcher.build_index(self._documents)
 
         self._index_built = True
+        logger.info("Index build complete")
 
     def search(
         self,
@@ -241,17 +252,20 @@ class MicroRAG:
         if not self._index_built:
             raise MicroRAGError("Index not built. Call build_index() first.")
 
+        logger.info("Searching for query=%r, top_k=%d, hybrid=%s", query, top_k, hybrid)
         hybrid_enabled = hybrid if hybrid is not None else self._config.hybrid_enabled
         similarity_threshold = (
             threshold if threshold is not None else self._config.similarity_threshold
         )
 
-        return self.searcher.search(
+        results = self.searcher.search(
             query=query,
             top_k=top_k,
             hybrid_enabled=hybrid_enabled,
             similarity_threshold=similarity_threshold,
         )
+        logger.debug("Search returned %d result(s)", len(results))
+        return results
 
     def get_document(self, doc_id: str) -> Document | None:
         """Retrieve a document by ID.
@@ -288,6 +302,7 @@ class MicroRAG:
 
     def close(self) -> None:
         """Close all resources."""
+        logger.debug("Closing MicroRAG resources")
         if self._storage is not None:
             self._storage.close()
             self._storage = None

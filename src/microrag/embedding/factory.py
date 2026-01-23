@@ -1,7 +1,11 @@
 """Factory for creating embedding models."""
 
+import logging
+
 from microrag.embedding.base import IEmbeddingModel
 from microrag.exceptions import ConfigurationError
+
+logger = logging.getLogger(__name__)
 
 
 def _is_sentence_transformers_available() -> bool:
@@ -50,8 +54,10 @@ def _detect_backend() -> str:
         ConfigurationError: If no backend is available.
     """
     if _is_sentence_transformers_available():
+        logger.debug("Auto-detected backend: sentence-transformers")
         return "sentence-transformers"
     if _is_fastembed_available():
+        logger.debug("Auto-detected backend: fastembed")
         return "fastembed"
 
     raise ConfigurationError(
@@ -85,6 +91,8 @@ def create_embedding_model(
     """
     if backend == "auto":
         backend = _detect_backend()
+
+    logger.info("Creating embedding model with backend=%s, model=%s", backend, model_path)
 
     if backend == "sentence-transformers":
         if not _is_sentence_transformers_available():

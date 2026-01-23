@@ -1,10 +1,13 @@
 """BM25 search index."""
 
+import logging
 from collections.abc import Sequence
 
 from rank_bm25 import BM25Okapi
 
 from microrag.query_processor import QueryProcessor
+
+logger = logging.getLogger(__name__)
 
 
 class BM25Index:
@@ -36,15 +39,18 @@ class BM25Index:
         if len(doc_ids) != len(documents):
             raise ValueError("doc_ids and documents must have same length")
 
+        logger.info("Building BM25 index for %d document(s)", len(documents))
         self._doc_ids = list(doc_ids)
         tokenized_docs = self._query_processor.tokenize_documents(documents)
 
         # Handle empty corpus
         if not tokenized_docs:
+            logger.debug("Empty corpus, skipping BM25 index build")
             self._bm25 = None
             return
 
         self._bm25 = BM25Okapi(tokenized_docs)
+        logger.debug("BM25 index built successfully")
 
     def search(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
         """Search the index with a query.
@@ -57,9 +63,11 @@ class BM25Index:
             List of (doc_id, score) tuples sorted by descending relevance.
         """
         if self._bm25 is None or not self._doc_ids:
+            logger.debug("BM25 index not built, returning empty results")
             return []
 
         query_tokens = self._query_processor.process_for_bm25(query)
+        logger.debug("BM25 query tokens: %s", query_tokens)
 
         if not query_tokens:
             return []
@@ -71,7 +79,9 @@ class BM25Index:
         scored_indices.sort(key=lambda x: x[1], reverse=True)
         top_indices = scored_indices[:top_k]
 
-        return [(self._doc_ids[i], score) for i, score in top_indices]
+        results = [(self._doc_ids[i], score) for i, score in top_indices]
+        logger.debug("BM25 search returned %d result(s)", len(results))
+        return results
 
     def clear(self) -> None:
         """Clear the index."""

@@ -1,5 +1,6 @@
 """Sentence-transformers embedding backend with ONNX support."""
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -9,6 +10,8 @@ from numpy.typing import NDArray
 
 from microrag.embedding.base import IEmbeddingModel
 from microrag.exceptions import EmbeddingError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
@@ -61,9 +64,11 @@ class SentenceTransformerModel(IEmbeddingModel):
         model_path = str(self._model_path)
 
         try:
+            logger.info("Loading sentence-transformers model: %s", model_path)
             model_kwargs: dict[str, dict[str, str]] = {}
 
             if self._model_file:
+                logger.debug("Using model file: %s", self._model_file)
                 model_kwargs["model_kwargs"] = {"file_name": self._model_file}
 
             self._model = SentenceTransformer(
@@ -71,6 +76,7 @@ class SentenceTransformerModel(IEmbeddingModel):
                 backend="onnx",
                 **model_kwargs,
             )
+            logger.info("Model loaded successfully, embedding_dim=%d", self.embedding_dim)
             return self._model
         except Exception as e:
             raise EmbeddingError(f"Failed to load model from {model_path}: {e}") from e
@@ -106,6 +112,7 @@ class SentenceTransformerModel(IEmbeddingModel):
             return np.array([], dtype=np.float32).reshape(0, self.embedding_dim)
 
         try:
+            logger.debug("Encoding %d text(s) with batch_size=%d", len(texts), self._batch_size)
             embeddings = self.model.encode(
                 list(texts),
                 batch_size=self._batch_size,
@@ -114,6 +121,7 @@ class SentenceTransformerModel(IEmbeddingModel):
                 show_progress_bar=False,
             )
             result: NDArray[np.float32] = np.asarray(embeddings, dtype=np.float32)
+            logger.debug("Encoding complete, shape=%s", result.shape)
             return result
         except Exception as e:
             raise EmbeddingError(f"Failed to encode texts: {e}") from e

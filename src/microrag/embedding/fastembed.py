@@ -1,5 +1,6 @@
 """FastEmbed embedding backend."""
 
+import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -8,6 +9,8 @@ from numpy.typing import NDArray
 
 from microrag.embedding.base import IEmbeddingModel
 from microrag.exceptions import EmbeddingError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from fastembed import TextEmbedding
@@ -59,14 +62,17 @@ class FastEmbedModel(IEmbeddingModel):
         TextEmbedding = _import_fastembed()
 
         try:
+            logger.info("Loading FastEmbed model: %s", self._model_name)
             kwargs: dict[str, Any] = {}
             if self._cache_dir:
+                logger.debug("Using cache directory: %s", self._cache_dir)
                 kwargs["cache_dir"] = self._cache_dir
 
             self._model = TextEmbedding(
                 model_name=self._model_name,
                 **kwargs,
             )
+            logger.info("FastEmbed model loaded successfully")
             return self._model
         except Exception as e:
             raise EmbeddingError(f"Failed to load FastEmbed model {self._model_name}: {e}") from e
@@ -112,6 +118,7 @@ class FastEmbedModel(IEmbeddingModel):
             return np.array([], dtype=np.float32).reshape(0, self.embedding_dim)
 
         try:
+            logger.debug("Encoding %d text(s) with batch_size=%d", len(texts), self._batch_size)
             embeddings_gen = self.model.embed(
                 list(texts),
                 batch_size=self._batch_size,
@@ -121,6 +128,7 @@ class FastEmbedModel(IEmbeddingModel):
             if normalize:
                 embeddings = self._normalize(embeddings)
 
+            logger.debug("Encoding complete, shape=%s", embeddings.shape)
             return embeddings
         except Exception as e:
             raise EmbeddingError(f"Failed to encode texts: {e}") from e
