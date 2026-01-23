@@ -1,5 +1,11 @@
 # MicroRAG
 
+[![CI](https://github.com/bigbag/microrag/workflows/CI/badge.svg)](https://github.com/bigbag/microrag/actions?query=workflow%3ACI)
+[![pypi](https://img.shields.io/pypi/v/microrag.svg)](https://pypi.python.org/pypi/microrag)
+[![downloads](https://img.shields.io/pypi/dm/microrag.svg)](https://pypistats.org/packages/microrag)
+[![versions](https://img.shields.io/pypi/pyversions/microrag.svg)](https://github.com/bigbag/microrag)
+[![license](https://img.shields.io/github/license/bigbag/microrag.svg)](https://github.com/bigbag/microrag/blob/master/LICENSE)
+
 A feature-rich, universal RAG library for Python with ONNX-backed embeddings and DuckDB storage.
 
 ## Features
