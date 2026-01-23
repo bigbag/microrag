@@ -1,6 +1,6 @@
 [project]
 name = "microrag"
-version = "0.2.1"
+version = "0.2.2"
 description = "A feature-rich, universal RAG library for Python with ONNX-backed embeddings and DuckDB storage"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,6 +21,7 @@ dependencies = [
     "duckdb>=0.9.0",
     "rank-bm25>=0.2.2",
     "numpy>=1.20.0",
+    "pyarrow>=23.0.0",
 ]
 
 [dependency-groups]

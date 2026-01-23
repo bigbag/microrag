@@ -27,10 +27,12 @@ class TestRAGConfig:
         assert config.abbreviations == {"ML": "machine learning"}
 
     def test_default_embedding_backend(self):
-        """Test that embedding_backend defaults to 'auto'."""
+        """Test that embedding_backend defaults to 'auto' with quantized model."""
         config = RAGConfig()
         assert config.embedding_backend == "auto"
-        assert config.model_path == ""
+        assert config.model_path == "sentence-transformers/all-MiniLM-L6-v2"
+        assert config.model_file == "onnx/model_qint8_avx512.onnx"
+        assert config.batch_size == 64
 
     def test_invalid_embedding_backend_raises_error(self):
         """Test that invalid embedding_backend raises ValueError."""

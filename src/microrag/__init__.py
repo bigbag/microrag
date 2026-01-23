@@ -1,7 +1,7 @@
 """MicroRAG - A feature-rich, universal RAG library for Python.
 
 MicroRAG provides:
-- ONNX-backed embeddings (CPU-only, no PyTorch at runtime)
+- ONNX-backed embeddings with quantized models for fast CPU inference
 - DuckDB storage with HNSW vector indexes
 - Three-tier hybrid search (semantic + BM25 + FTS) with RRF fusion
 - Query preprocessing with abbreviation expansion
@@ -10,10 +10,8 @@ Example:
     ```python
     from microrag import MicroRAG, RAGConfig
 
-    config = RAGConfig(
-        model_path="/path/to/all-MiniLM-L6-v2",
-        db_path="./rag.duckdb",
-    )
+    # Uses sentence-transformers/all-MiniLM-L6-v2 with quantized ONNX by default
+    config = RAGConfig(db_path="./rag.duckdb")
 
     with MicroRAG(config) as rag:
         rag.add_documents(["Document 1", "Document 2"])
@@ -35,7 +33,7 @@ from microrag.exceptions import (
 )
 from microrag.models import Document, SearchResult
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     # Main classes

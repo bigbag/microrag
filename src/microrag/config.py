@@ -5,6 +5,11 @@ from typing import Any
 
 from microrag.stopwords import ENGLISH_STOPWORDS
 
+# Default model for sentence-transformers backend (fast, good quality, 384 dims)
+_DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# Quantized ONNX model for ~2x faster inference on CPU
+_DEFAULT_MODEL_FILE = "onnx/model_qint8_avx512.onnx"
+
 
 @dataclass(frozen=True)
 class RAGConfig:
@@ -12,8 +17,11 @@ class RAGConfig:
 
     Attributes:
         model_path: Model path (sentence-transformers) or model name (fastembed).
+            Defaults to "sentence-transformers/all-MiniLM-L6-v2".
         embedding_backend: Embedding backend ("auto", "sentence-transformers", "fastembed").
+            Defaults to "auto" which prefers sentence-transformers for best performance.
         model_file: ONNX model filename within model_path (sentence-transformers only).
+            Defaults to quantized model for ~2x faster CPU inference.
         fastembed_cache_dir: Cache directory for fastembed models.
         db_path: DuckDB database path. Use ":memory:" for in-memory database.
         embedding_dim: Dimension of embedding vectors.
@@ -32,9 +40,9 @@ class RAGConfig:
         batch_size: Batch size for embedding generation.
     """
 
-    model_path: str = ""
+    model_path: str = _DEFAULT_MODEL
     embedding_backend: str = "auto"
-    model_file: str | None = None
+    model_file: str | None = _DEFAULT_MODEL_FILE
     fastembed_cache_dir: str | None = None
     db_path: str = ":memory:"
     embedding_dim: int = 384
@@ -50,7 +58,7 @@ class RAGConfig:
     hnsw_ef_search: int = 100
     hnsw_m: int = 16
     hnsw_enable_persistence: bool = False
-    batch_size: int = 32
+    batch_size: int = 64
 
     def __post_init__(self) -> None:
         valid_backends = ("auto", "sentence-transformers", "fastembed")

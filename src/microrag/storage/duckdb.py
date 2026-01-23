@@ -8,6 +8,7 @@ from pathlib import Path
 
 import duckdb
 import numpy as np
+import pyarrow as pa  # type: ignore[import-untyped]
 from numpy.typing import NDArray
 
 from microrag.exceptions import StorageError
@@ -88,37 +89,51 @@ class DuckDBStorage(IStorageAdapter):
             conn.execute("SET hnsw_enable_experimental_persistence = true")
 
         # Create documents table
-        conn.execute(f"""
+        conn.execute(
+            f"""
             CREATE TABLE IF NOT EXISTS documents (
                 id VARCHAR PRIMARY KEY,
                 content TEXT NOT NULL,
                 metadata JSON,
                 embedding FLOAT[{self._embedding_dim}]
             )
-        """)
+        """
+        )
 
     def add_documents(self, documents: Sequence[Document]) -> None:
-        """Add documents to storage."""
+        """Add documents to storage using PyArrow bulk import for performance."""
         if not documents:
             return
 
-        logger.debug("Storing %d document(s) in DuckDB", len(documents))
+        logger.debug("Storing %d document(s) in DuckDB via PyArrow", len(documents))
         conn = self.conn
         try:
+            # Validate embeddings
             for doc in documents:
                 if doc.embedding is None:
                     raise StorageError(f"Document {doc.id} has no embedding")
 
-                embedding_list = doc.embedding.tolist()
-                metadata_json = json.dumps(doc.metadata)
+            # Create PyArrow table - DuckDB can query it directly by name
+            arrow_table = pa.table(  # noqa: F841
+                {
+                    "id": [doc.id for doc in documents],
+                    "content": [doc.content for doc in documents],
+                    "metadata": [json.dumps(doc.metadata) for doc in documents],
+                    "embedding": pa.array(
+                        [doc.embedding.tolist() for doc in documents],  # type: ignore[union-attr]
+                        type=pa.list_(pa.float32()),
+                    ),
+                }
+            )
 
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO documents (id, content, metadata, embedding)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    [doc.id, doc.content, metadata_json, embedding_list],
-                )
+            # Bulk import directly from PyArrow table (no temp file needed)
+            conn.execute(
+                f"""
+                INSERT OR REPLACE INTO documents
+                SELECT id, content, metadata::JSON, embedding::FLOAT[{self._embedding_dim}]
+                FROM arrow_table
+                """
+            )
 
             # Invalidate indexes after adding documents
             self._vector_index_built = False
@@ -223,7 +238,8 @@ class DuckDBStorage(IStorageAdapter):
             conn.execute("DROP INDEX IF EXISTS documents_embedding_idx")
 
             # Create HNSW index
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE INDEX documents_embedding_idx ON documents
                 USING HNSW (embedding)
                 WITH (
@@ -232,7 +248,8 @@ class DuckDBStorage(IStorageAdapter):
                     ef_search = {ef_search},
                     m = {m}
                 )
-            """)
+            """
+            )
 
             self._vector_index_built = True
             logger.debug("HNSW vector index built")
@@ -246,7 +263,8 @@ class DuckDBStorage(IStorageAdapter):
             conn = self.conn
 
             # Create FTS index using PRAGMA
-            conn.execute("""
+            conn.execute(
+                """
                 PRAGMA create_fts_index(
                     'documents',
                     'id',
@@ -257,7 +275,8 @@ class DuckDBStorage(IStorageAdapter):
                     strip_accents = 1,
                     lower = 1
                 )
-            """)
+            """
+            )
 
             self._fts_index_built = True
             logger.debug("FTS index built")
