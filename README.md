@@ -182,6 +182,7 @@ config = RAGConfig(
     # HNSW tuning
     hnsw_ef_construction=200,         # Build-time parameter
     hnsw_ef_search=100,               # Search-time parameter
+    hnsw_enable_persistence=False,    # Experimental index persistence
 )
 ```
 
@@ -214,6 +215,7 @@ config = RAGConfig(
 **HNSW Tuning:**
 - `hnsw_ef_construction` (int, default: 200) - HNSW build parameter
 - `hnsw_ef_search` (int, default: 100) - HNSW search parameter
+- `hnsw_enable_persistence` (bool, default: False) - Enable experimental HNSW index persistence
 
 ## API Reference
 

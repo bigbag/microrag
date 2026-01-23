@@ -23,11 +23,18 @@ class DuckDBStorage(IStorageAdapter):
     Args:
         db_path: Path to DuckDB database file. Use ":memory:" for in-memory.
         embedding_dim: Dimension of embedding vectors.
+        hnsw_enable_persistence: Enable experimental HNSW index persistence.
     """
 
-    def __init__(self, db_path: str = ":memory:", embedding_dim: int = 384) -> None:
+    def __init__(
+        self,
+        db_path: str = ":memory:",
+        embedding_dim: int = 384,
+        hnsw_enable_persistence: bool = False,
+    ) -> None:
         self._db_path = db_path
         self._embedding_dim = embedding_dim
+        self._hnsw_enable_persistence = hnsw_enable_persistence
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._vector_index_built = False
         self._fts_index_built = False
@@ -64,6 +71,10 @@ class DuckDBStorage(IStorageAdapter):
         conn.execute("LOAD vss")
         conn.execute("INSTALL fts")
         conn.execute("LOAD fts")
+
+        # Enable experimental HNSW persistence if requested
+        if self._hnsw_enable_persistence:
+            conn.execute("SET hnsw_enable_experimental_persistence = true")
 
         # Create documents table
         conn.execute(f"""

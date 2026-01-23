@@ -73,6 +73,7 @@ class MicroRAG:
             self._storage = DuckDBStorage(
                 db_path=self._config.db_path,
                 embedding_dim=self._config.embedding_dim,
+                hnsw_enable_persistence=self._config.hnsw_enable_persistence,
             )
         return self._storage
 

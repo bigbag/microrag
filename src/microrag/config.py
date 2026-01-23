@@ -28,6 +28,7 @@ class RAGConfig:
         hnsw_ef_construction: HNSW index build-time parameter.
         hnsw_ef_search: HNSW index search-time parameter.
         hnsw_m: HNSW index M parameter (connections per layer).
+        hnsw_enable_persistence: Enable experimental HNSW index persistence.
         batch_size: Batch size for embedding generation.
     """
 
@@ -48,6 +49,7 @@ class RAGConfig:
     hnsw_ef_construction: int = 200
     hnsw_ef_search: int = 100
     hnsw_m: int = 16
+    hnsw_enable_persistence: bool = False
     batch_size: int = 32
 
     def __post_init__(self) -> None:
@@ -87,6 +89,7 @@ class RAGConfig:
             "hnsw_ef_construction": self.hnsw_ef_construction,
             "hnsw_ef_search": self.hnsw_ef_search,
             "hnsw_m": self.hnsw_m,
+            "hnsw_enable_persistence": self.hnsw_enable_persistence,
             "batch_size": self.batch_size,
         }
         current.update(kwargs)
