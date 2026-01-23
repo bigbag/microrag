@@ -152,6 +152,34 @@ Each search method has different strengths:
 
 By combining all three with RRF fusion, MicroRAG achieves better recall and precision than any single method alone.
 
+### Filtering Irrelevant Results
+
+By default, search returns the top-k results regardless of relevance. For queries like "111111" or random gibberish, the system will still return documents (just with lower scores). To filter out irrelevant results, use `similarity_threshold`.
+
+**Understanding RRF scores:** RRF fusion produces scores typically in the 0.01-0.03 range, not 0-1 like raw cosine similarity. This is because RRF scores are based on rank positions: `score = Σ weight / (k + rank)`.
+
+**Finding the right threshold:**
+
+```python
+# Test with your data to find appropriate threshold
+results = rag.search("relevant query", threshold=0.0)
+print(f"Relevant score: {results[0].score}")  # e.g., 0.016
+
+results = rag.search("gibberish123", threshold=0.0)
+print(f"Irrelevant score: {results[0].score}")  # e.g., 0.011
+
+# Set threshold between irrelevant and relevant scores
+config = RAGConfig(
+    model_path="...",
+    similarity_threshold=0.014,  # Filters gibberish, keeps relevant
+)
+```
+
+**Typical thresholds:**
+- `0.0` - Return all results (no filtering)
+- `0.010-0.015` - Filter obvious gibberish while keeping most relevant results
+- `0.015-0.020` - Stricter filtering, may reduce recall for edge cases
+
 ## Configuration
 
 ```python
@@ -173,7 +201,7 @@ config = RAGConfig(
     # Search
     hybrid_enabled=True,              # Enable hybrid search
     hybrid_alpha=0.7,                 # Semantic weight (0-1)
-    similarity_threshold=0.4,         # Min score threshold
+    similarity_threshold=0.014,       # Min score threshold (RRF scores are ~0.01-0.03)
 
     # Query processing
     abbreviations={"ML": "machine learning"},  # Query expansion
@@ -205,7 +233,7 @@ config = RAGConfig(
 **Search:**
 - `hybrid_enabled` (bool, default: True) - Enable hybrid search
 - `hybrid_alpha` (float, default: 0.7) - Semantic weight in fusion (0-1)
-- `similarity_threshold` (float, default: 0.4) - Minimum score to return
+- `similarity_threshold` (float, default: 0.4) - Minimum score to return (see [Filtering Irrelevant Results](#filtering-irrelevant-results))
 
 **Query Processing:**
 - `abbreviations` (dict, default: None) - Query expansion mapping
