@@ -1,6 +1,6 @@
 [project]
 name = "microrag"
-version = "0.2.2"
+version = "0.2.5"
 description = "A feature-rich, universal RAG library for Python with ONNX-backed embeddings and DuckDB storage"
 readme = "README.md"
 requires-python = ">=3.12"
