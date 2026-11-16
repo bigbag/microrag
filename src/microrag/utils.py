@@ -51,7 +51,6 @@ def chunk_text(
 
     chunks = []
     start = 0
-    prev_start = -1
 
     while start < len(text):
         # Calculate end position
@@ -71,10 +70,9 @@ def chunk_text(
         new_start = break_point - chunk_overlap
 
         # Ensure progress - if we're not moving forward, force it
-        if new_start <= prev_start:
+        if new_start <= start:
             new_start = break_point
 
-        prev_start = start
         start = new_start
 
     return chunks
@@ -145,7 +143,7 @@ def normalize_document_input(
         return (
             doc.get("id"),
             content,
-            doc.get("metadata", {}),
+            doc.get("metadata") or {},
         )
 
     raise ValueError(f"Invalid document type: {type(doc)}")

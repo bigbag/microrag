@@ -64,7 +64,7 @@ def main() -> None:
         model_path=MODEL_PATH,
         db_path=":memory:",
         chunk_size=2000,  # Large enough to avoid chunking FAQs
-        similarity_threshold=0.3,
+        similarity_threshold=0.01,
     )
 
     with MicroRAG(config) as rag:

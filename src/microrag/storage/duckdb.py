@@ -40,8 +40,6 @@ class DuckDBStorage(IStorageAdapter):
         self._embedding_dim = embedding_dim
         self._hnsw_enable_persistence = hnsw_enable_persistence
         self._conn: duckdb.DuckDBPyConnection | None = None
-        self._vector_index_built = False
-        self._fts_index_built = False
         logger.debug(
             "DuckDBStorage initialized: db_path=%s, embedding_dim=%d",
             db_path,
@@ -135,9 +133,6 @@ class DuckDBStorage(IStorageAdapter):
                 """
             )
 
-            # Invalidate indexes after adding documents
-            self._vector_index_built = False
-            self._fts_index_built = False
             logger.debug("Documents stored successfully")
 
         except Exception as e:
@@ -205,8 +200,6 @@ class DuckDBStorage(IStorageAdapter):
         """Remove all documents from storage."""
         try:
             self.conn.execute("DELETE FROM documents")
-            self._vector_index_built = False
-            self._fts_index_built = False
         except Exception as e:
             raise StorageError(f"Failed to clear documents: {e}") from e
 
@@ -225,6 +218,11 @@ class DuckDBStorage(IStorageAdapter):
         m: int = 16,
     ) -> None:
         """Build HNSW vector index for similarity search."""
+        if self._db_path != ":memory:" and not self._hnsw_enable_persistence:
+            # DuckDB refuses HNSW on file databases without the experimental flag
+            logger.info("Skipping HNSW index for file database, vector search uses exact scan")
+            return
+
         try:
             logger.info(
                 "Building HNSW vector index: ef_construction=%d, ef_search=%d, m=%d",
@@ -251,7 +249,6 @@ class DuckDBStorage(IStorageAdapter):
             """
             )
 
-            self._vector_index_built = True
             logger.debug("HNSW vector index built")
         except Exception as e:
             raise StorageError(f"Failed to build vector index: {e}") from e
@@ -273,19 +270,15 @@ class DuckDBStorage(IStorageAdapter):
                     stopwords = 'english',
                     ignore = '(\\.|[^a-z]+)',
                     strip_accents = 1,
-                    lower = 1
+                    lower = 1,
+                    overwrite = 1
                 )
             """
             )
 
-            self._fts_index_built = True
             logger.debug("FTS index built")
         except Exception as e:
-            # FTS index might already exist - that's ok
-            if "already exists" not in str(e).lower():
-                raise StorageError(f"Failed to build FTS index: {e}") from e
-            logger.debug("FTS index already exists")
-            self._fts_index_built = True
+            raise StorageError(f"Failed to build FTS index: {e}") from e
 
     def vector_search(
         self,
@@ -295,22 +288,23 @@ class DuckDBStorage(IStorageAdapter):
         """Search by vector similarity using HNSW index."""
         try:
             logger.debug("Performing vector search, top_k=%d", top_k)
-            embedding_list = query_embedding.tolist()
+            # A string binds ~9x faster than a Python list of floats and gives the same vector
+            embedding_list = str(query_embedding.tolist())
 
-            # Use array_cosine_similarity for similarity search
+            # DuckDB uses the HNSW index only for ORDER BY <metric distance> ASC LIMIT n.
             # Note: embedding dimension must be in SQL directly, not parameterized
             results = self.conn.execute(
                 f"""
-                SELECT id, array_cosine_similarity(embedding, ?::FLOAT[{self._embedding_dim}]) as score
+                SELECT id, array_cosine_distance(embedding, ?::FLOAT[{self._embedding_dim}]) as distance
                 FROM documents
                 WHERE embedding IS NOT NULL
-                ORDER BY score DESC
+                ORDER BY distance
                 LIMIT ?
                 """,
                 [embedding_list, top_k],
             ).fetchall()
 
-            result_list = [(row[0], float(row[1])) for row in results]
+            result_list = [(row[0], 1.0 - float(row[1])) for row in results]
             logger.debug("Vector search returned %d result(s)", len(result_list))
             return result_list
         except Exception as e:
@@ -329,8 +323,11 @@ class DuckDBStorage(IStorageAdapter):
             logger.debug("Performing FTS search: query=%r, top_k=%d", query, top_k)
             results = self.conn.execute(
                 """
-                SELECT id, fts_main_documents.match_bm25(id, ?) as score
-                FROM documents
+                SELECT id, score
+                FROM (
+                    SELECT id, fts_main_documents.match_bm25(id, ?) as score
+                    FROM documents
+                ) AS scored
                 WHERE score IS NOT NULL
                 ORDER BY score DESC
                 LIMIT ?

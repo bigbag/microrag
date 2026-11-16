@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -50,7 +49,7 @@ class SentenceTransformerModel(IEmbeddingModel):
     ) -> None:
         if not model_path:
             raise ValueError("model_path is required for sentence-transformers backend")
-        self._model_path = Path(model_path)
+        self._model_path = model_path
         self._model_file = model_file
         self._batch_size = batch_size
         self._model: SentenceTransformer | None = None
@@ -61,7 +60,7 @@ class SentenceTransformerModel(IEmbeddingModel):
             return self._model
 
         SentenceTransformer = _import_sentence_transformers()
-        model_path = str(self._model_path)
+        model_path = self._model_path
 
         try:
             logger.info("Loading sentence-transformers model: %s", model_path)

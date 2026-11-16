@@ -43,9 +43,8 @@ class BM25Index:
         self._doc_ids = list(doc_ids)
         tokenized_docs = self._query_processor.tokenize_documents(documents)
 
-        # Handle empty corpus
-        if not tokenized_docs:
-            logger.debug("Empty corpus, skipping BM25 index build")
+        if not any(tokenized_docs):
+            logger.debug("No tokens, skipping BM25 index build")
             self._bm25 = None
             return
 

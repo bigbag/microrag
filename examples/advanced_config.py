@@ -31,7 +31,7 @@ def main() -> None:
         # Hybrid search settings
         hybrid_enabled=True,
         hybrid_alpha=0.7,  # 70% semantic, 30% keyword (BM25+FTS)
-        similarity_threshold=0.3,  # Lower threshold to include more results
+        similarity_threshold=0.01,  # RRF scores are at most ~0.016 in hybrid mode
         # Chunking for long documents
         chunk_size=500,  # Smaller chunks for more granular retrieval
         chunk_overlap=100,
@@ -88,16 +88,16 @@ def main() -> None:
         print("\n=== Threshold Comparison ===")
         print("Query: 'quantum computing' (not in documents)")
 
-        low_threshold_results = rag.search("quantum computing", top_k=3, threshold=0.1)
-        print(f"Threshold 0.1: {len(low_threshold_results)} results")
+        low_threshold_results = rag.search("quantum computing", top_k=3, threshold=0.0)
+        print(f"Threshold 0.0: {len(low_threshold_results)} results")
 
-        high_threshold_results = rag.search("quantum computing", top_k=3, threshold=0.5)
-        print(f"Threshold 0.5: {len(high_threshold_results)} results")
+        high_threshold_results = rag.search("quantum computing", top_k=3, threshold=0.015)
+        print(f"Threshold 0.015: {len(high_threshold_results)} results")
 
     # Create config variant using with_updates()
     print("\n=== Config Variants with with_updates() ===")
     strict_config = config.with_updates(
-        similarity_threshold=0.6,
+        similarity_threshold=0.015,
         hybrid_alpha=0.9,  # More weight on semantic search
     )
     print(f"Original threshold: {config.similarity_threshold}")

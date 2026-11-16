@@ -28,6 +28,14 @@ MicroRAG uses [ONNX](https://onnx.ai) (Open Neural Network Exchange) format for 
 
 ## Installation
 
+The core package supports Python 3.12–3.15. Python 3.15 requires your own embedding implementation. The bundled sentence-transformers and FastEmbed backends require Python 3.12–3.14 because ONNX Runtime 1.32.0 has no Python 3.15 distribution.
+
+MicroRAG 1.0 raises the minimum dependency versions, including DuckDB 2.0.0. Projects that require DuckDB 1.x must use MicroRAG 0.x.
+
+Back up database files before upgrading. DuckDB 2.0 keeps the storage format of existing files. New files use a format that DuckDB 1.x cannot read. See the [DuckDB migration guide](https://duckdb.org/docs/2.0/operations_manual/migration.html#storage-format).
+
+Do not share one MicroRAG instance across concurrent threads. DuckDB 2.0 rejects overlapping calls on one connection.
+
 ```bash
 # Core (no embedding backend - bring your own)
 pip install microrag
@@ -89,6 +97,20 @@ with MicroRAG(config) as rag:
     rag.add_documents(["Machine learning is a subset of AI."])
     rag.build_index()
     results = rag.search("neural networks")
+```
+
+### With a custom embedding model
+
+Pass an implementation of `microrag.embedding.IEmbeddingModel` as `embedding_model`. MicroRAG uses this model instead of loading a configured backend. Set `embedding_dim` to the model's dimension. `close()` retains a supplied model so that you can use the same MicroRAG instance again. It releases models that MicroRAG loads.
+
+Given your `model` instance:
+
+```python
+config = RAGConfig(embedding_dim=model.embedding_dim)
+with MicroRAG(config, embedding_model=model) as rag:
+    rag.add_documents(["Machine learning is a subset of AI."])
+    rag.build_index()
+    results = rag.search("machine learning")
 ```
 
 ## Search Pipeline
@@ -156,7 +178,7 @@ By combining all three with RRF fusion, MicroRAG achieves better recall and prec
 
 By default, search returns the top-k results regardless of relevance. For queries like "111111" or random gibberish, the system will still return documents (just with lower scores). To filter out irrelevant results, use `similarity_threshold`.
 
-**Understanding RRF scores:** RRF fusion produces scores typically in the 0.01-0.03 range, not 0-1 like raw cosine similarity. This is because RRF scores are based on rank positions: `score = Σ weight / (k + rank)`.
+**Understanding RRF scores:** Hybrid scores depend on rank positions: `score = Σ weight / (k + rank)`. With the default `k=60`, the maximum score is `1/61` (approximately `0.0164`). Cosine similarity ranges from -1 to 1.
 
 **Finding the right threshold:**
 
@@ -178,7 +200,7 @@ config = RAGConfig(
 **Typical thresholds:**
 - `0.0` - Return all results (no filtering)
 - `0.010-0.015` - Filter obvious gibberish while keeping most relevant results
-- `0.015-0.020` - Stricter filtering, may reduce recall for edge cases
+- `0.015-0.016` - Stricter filtering, may reduce recall for edge cases
 
 ## Configuration
 
@@ -201,7 +223,7 @@ config = RAGConfig(
     # Search
     hybrid_enabled=True,              # Enable hybrid search
     hybrid_alpha=0.7,                 # Semantic weight (0-1)
-    similarity_threshold=0.014,       # Min score threshold (RRF scores are ~0.01-0.03)
+    similarity_threshold=0.014,       # Min score threshold (RRF scores are at most ~0.0164)
 
     # Query processing
     abbreviations={"ML": "machine learning"},  # Query expansion
@@ -219,8 +241,10 @@ config = RAGConfig(
 **Embedding:**
 - `model_path` (str) - Model path (sentence-transformers) or model name (fastembed)
 - `embedding_backend` (str, default: "auto") - Backend: "auto", "sentence-transformers", "fastembed"
-- `model_file` (str, default: None) - ONNX filename (sentence-transformers only)
+- `model_file` (str, default: "onnx/model_qint8_avx512.onnx") - ONNX filename (sentence-transformers only)
 - `fastembed_cache_dir` (str, default: None) - Cache directory (fastembed only)
+
+For a local model without the default quantized file, set `model_file=None` or specify an existing ONNX filename.
 
 **Storage:**
 - `db_path` (str, default: `:memory:`) - DuckDB database path
@@ -233,17 +257,19 @@ config = RAGConfig(
 **Search:**
 - `hybrid_enabled` (bool, default: True) - Enable hybrid search
 - `hybrid_alpha` (float, default: 0.7) - Semantic weight in fusion (0-1)
-- `similarity_threshold` (float, default: 0.4) - Minimum score to return (see [Filtering Irrelevant Results](#filtering-irrelevant-results))
+- `similarity_threshold` (float, default: 0.0) - Minimum score to return (see [Filtering Irrelevant Results](#filtering-irrelevant-results))
 
 **Query Processing:**
-- `abbreviations` (dict, default: None) - Query expansion mapping
+- `abbreviations` (dict, default: {}) - Query expansion mapping
 - `stopwords` (set, default: English) - Stopwords for BM25 tokenization
 - `remove_stopwords` (bool, default: True) - Enable stopword removal
 
 **HNSW Tuning:**
 - `hnsw_ef_construction` (int, default: 200) - HNSW build parameter
 - `hnsw_ef_search` (int, default: 100) - HNSW search parameter
-- `hnsw_enable_persistence` (bool, default: False) - Enable experimental HNSW index persistence
+- `hnsw_enable_persistence` (bool, default: False) - Enable experimental HNSW index persistence. A file database without this option uses exact vector search (no HNSW index).
+
+Call `build_index()` again after you open an existing database file.
 
 ## API Reference
 
@@ -289,7 +315,7 @@ Document data model.
 from microrag import Document
 
 doc = Document(
-    id="doc1",                    # Optional, auto-generated if not provided
+    id="doc1",                    # Required (str and dict inputs get an auto-generated ID)
     content="Document text...",   # Required
     metadata={"source": "wiki"},  # Optional metadata
 )
@@ -355,9 +381,11 @@ make example name=faq_search
 
 ## Development
 
+Tests use the standard-library `unittest.mock` for embedding models. Database fixtures close their connections after each test.
+
 ```bash
 # Clone and install
-git clone https://github.com/yourname/microrag.git
+git clone https://github.com/bigbag/microrag.git
 cd microrag
 uv sync --group dev
 

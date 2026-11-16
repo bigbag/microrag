@@ -1,12 +1,12 @@
 [project]
 name = "microrag"
-version = "0.2.5"
+dynamic = ["version"]
 description = "A feature-rich, universal RAG library for Python with ONNX-backed embeddings and DuckDB storage"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "Pavel Liashkov", email = "pavel.liashkov@protonamil.com" }]
-keywords = ["rag", "embeddings", "vector-search", "duckdb", "onnx", "nlp", "bm25", "duckdb", "fts"]
+keywords = ["rag", "embeddings", "vector-search", "duckdb", "onnx", "nlp", "bm25", "fts"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -15,41 +15,40 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "duckdb>=0.9.0",
+    "duckdb>=2.0.0",
     "rank-bm25>=0.2.2",
-    "numpy>=1.20.0",
-    "pyarrow>=23.0.0",
+    "numpy>=2.5.5",
+    "pyarrow>=26.0.1",
 ]
 
 [dependency-groups]
 dev = [
-    "mypy>=1.16.0",
-    "pyclean>=3.1.0",
-    "pytest>=8.4.0",
-    "pytest-cov>=6.1.1",
-    "pytest-mock>=3.14.1",
-    "ruff>=0.9.0",
+    "mypy>=2.4.1",
+    "pyclean>=3.7.0",
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.5",
 ]
 
 [project.optional-dependencies]
 sentence-transformers = [
-    "sentence-transformers>=2.2.0",
-    "onnxruntime>=1.17.0",
+    "sentence-transformers[onnx]>=5.7.0",
 ]
 fastembed = [
-    "fastembed>=0.2.0",
+    "fastembed>=0.9.1",
 ]
 all = [
     "microrag[sentence-transformers]",
     "microrag[fastembed]",
 ]
 cpu = [
-    "torch",
-    "torchvision",
-    "torchaudio",
+    "torch>=2.15.0",
+    "torchvision>=0.29.2",
+    "torchaudio>=2.11.1",
 ]
 
 [tool.uv.sources]
@@ -69,8 +68,11 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/microrag/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/microrag"]

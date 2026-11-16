@@ -1,5 +1,6 @@
 """Integration tests for MicroRAG."""
 
+import numpy as np
 import pytest
 
 from microrag import Document, MicroRAG, RAGConfig, SearchResult
@@ -53,7 +54,7 @@ class TestMicroRAGIntegration:
         rag_with_mock_embeddings.build_index()
 
         results = rag_with_mock_embeddings.search("machine learning", top_k=2)
-        assert len(results) <= 2
+        assert len(results) == 2
         assert all(isinstance(r, SearchResult) for r in results)
 
     def test_search_options(self, rag_with_mock_embeddings: MicroRAG):
@@ -70,29 +71,61 @@ class TestMicroRAGIntegration:
         for r in results:
             assert r.score >= 0.99
 
-    def test_document_operations(self, rag_with_mock_embeddings: MicroRAG):
+    def test_document_operations(self, rag_with_mock_embeddings: MicroRAG, mock_embeddings):
         """Test document retrieval and management."""
         rag_with_mock_embeddings.add_documents(
             [
-                Document(id="test1", content="Test content"),
+                Document(id="test1", content="Test content", embedding=mock_embeddings[0]),
                 "Another document",
             ]
         )
         rag_with_mock_embeddings.build_index()
 
         assert rag_with_mock_embeddings.count() == 2
-        assert rag_with_mock_embeddings.get_document("test1") is not None
+        stored = rag_with_mock_embeddings.get_document("test1")
+        assert stored is not None
+        np.testing.assert_array_equal(stored.embedding, mock_embeddings[0])
         assert len(rag_with_mock_embeddings.get_all_documents()) == 2
 
         rag_with_mock_embeddings.clear()
         assert rag_with_mock_embeddings.count() == 0
 
+    @pytest.mark.parametrize("hybrid", [False, True])
+    def test_search_stopword_only_documents(self, rag_with_mock_embeddings: MicroRAG, hybrid):
+        rag_with_mock_embeddings.add_documents(["the and or"])
+        rag_with_mock_embeddings.build_index()
+
+        results = rag_with_mock_embeddings.search("the and or", hybrid=hybrid)
+        assert [result.content for result in results] == ["the and or"]
+
+    @pytest.mark.parametrize("reuse_instance", [False, True])
+    def test_reopen_file_database(
+        self, rag_config: RAGConfig, mock_embedding_model, tmp_path, reuse_instance: bool
+    ):
+        """Test that a reopened file database is searchable after build_index()."""
+        config = rag_config.with_updates(db_path=str(tmp_path / "rag.duckdb"))
+
+        with MicroRAG(config, embedding_model=mock_embedding_model) as rag:
+            doc_ids = rag.add_documents(
+                ["Machine learning is great", "Cooking pasta at home", "Growing garden flowers"]
+            )
+            rag.build_index()
+
+        if not reuse_instance:
+            rag = MicroRAG(config, embedding_model=mock_embedding_model)
+
+        with rag:
+            rag.build_index()
+            results = rag.search("pasta")
+            assert [doc_id for doc_id, _ in rag.searcher.bm25_search("pasta")] == [doc_ids[1]]
+
+        assert results[0].content == "Cooking pasta at home"
+
     def test_abbreviation_expansion_in_search(self, rag_config: RAGConfig, mock_embedding_model):
         """Test that abbreviations are expanded during search."""
         config = rag_config.with_updates(abbreviations={"ML": "machine learning"})
 
-        with MicroRAG(config) as rag:
-            rag._embedding_model = mock_embedding_model
+        with MicroRAG(config, embedding_model=mock_embedding_model) as rag:
             rag.add_documents(
                 [
                     "Machine learning is a field of artificial intelligence",

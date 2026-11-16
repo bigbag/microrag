@@ -1,6 +1,6 @@
 """Configuration for MicroRAG."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from microrag.stopwords import ENGLISH_STOPWORDS
@@ -29,7 +29,9 @@ class RAGConfig:
         chunk_overlap: Overlap between consecutive chunks.
         hybrid_enabled: Enable hybrid search (semantic + BM25 + FTS).
         hybrid_alpha: Weight for semantic search in fusion (0-1).
-        similarity_threshold: Minimum score threshold for results.
+        similarity_threshold: Minimum score threshold for results. Hybrid search
+            gives RRF scores (at most 1/61, approximately 0.016). Semantic-only
+            search gives cosine similarity (-1 to 1).
         abbreviations: Mapping of abbreviations to expansions for query processing.
         stopwords: Set of stopwords for BM25 tokenization.
         remove_stopwords: Enable stopword removal in BM25 tokenization.
@@ -50,7 +52,7 @@ class RAGConfig:
     chunk_overlap: int = 200
     hybrid_enabled: bool = True
     hybrid_alpha: float = 0.7
-    similarity_threshold: float = 0.4
+    similarity_threshold: float = 0.0
     abbreviations: dict[str, str] = field(default_factory=dict)
     stopwords: frozenset[str] = field(default_factory=lambda: ENGLISH_STOPWORDS)
     remove_stopwords: bool = True
@@ -79,26 +81,6 @@ class RAGConfig:
 
     def with_updates(self, **kwargs: Any) -> "RAGConfig":
         """Create a new config with updated values."""
-        current: dict[str, Any] = {
-            "model_path": self.model_path,
-            "embedding_backend": self.embedding_backend,
-            "model_file": self.model_file,
-            "fastembed_cache_dir": self.fastembed_cache_dir,
-            "db_path": self.db_path,
-            "embedding_dim": self.embedding_dim,
-            "chunk_size": self.chunk_size,
-            "chunk_overlap": self.chunk_overlap,
-            "hybrid_enabled": self.hybrid_enabled,
-            "hybrid_alpha": self.hybrid_alpha,
-            "similarity_threshold": self.similarity_threshold,
-            "abbreviations": dict(self.abbreviations),
-            "stopwords": self.stopwords,
-            "remove_stopwords": self.remove_stopwords,
-            "hnsw_ef_construction": self.hnsw_ef_construction,
-            "hnsw_ef_search": self.hnsw_ef_search,
-            "hnsw_m": self.hnsw_m,
-            "hnsw_enable_persistence": self.hnsw_enable_persistence,
-            "batch_size": self.batch_size,
-        }
-        current.update(kwargs)
-        return RAGConfig(**current)
+        if "abbreviations" not in kwargs:
+            kwargs["abbreviations"] = dict(self.abbreviations)
+        return replace(self, **kwargs)

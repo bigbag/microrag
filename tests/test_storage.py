@@ -74,3 +74,15 @@ class TestDuckDBStorage:
 
         # Empty query returns empty
         assert storage_with_docs.fts_search("", top_k=3) == []
+
+    def test_fts_index_rebuild_includes_new_documents(
+        self, storage_with_docs: DuckDBStorage, embedding_dim: int
+    ):
+        """Test that rebuilding the FTS index includes documents added later."""
+        embedding = np.random.rand(embedding_dim).astype(np.float32)
+        storage_with_docs.add_documents(
+            [Document(id="zebra", content="Zebra stripes are unique", embedding=embedding)]
+        )
+        storage_with_docs.build_fts_index()
+
+        assert [doc_id for doc_id, _ in storage_with_docs.fts_search("zebra")] == ["zebra"]

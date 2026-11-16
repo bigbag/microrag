@@ -40,12 +40,16 @@ class MicroRAG:
 
     Args:
         config: RAGConfig instance with all settings.
+        embedding_model: Optional model that replaces the configured embedding backend.
     """
 
-    def __init__(self, config: RAGConfig) -> None:
+    def __init__(
+        self, config: RAGConfig, *, embedding_model: IEmbeddingModel | None = None
+    ) -> None:
         self._config = config
         self._storage: DuckDBStorage | None = None
-        self._embedding_model: IEmbeddingModel | None = None
+        self._embedding_model: IEmbeddingModel | None = embedding_model
+        self._provided_embedding_model = embedding_model
         self._query_processor: QueryProcessor | None = None
         self._searcher: HybridSearcher | None = None
         self._documents: list[Document] = []
@@ -175,6 +179,7 @@ class MicroRAG:
                     id=final_id,
                     content=content,
                     metadata=metadata,
+                    embedding=doc.embedding if isinstance(doc, Document) else None,
                 )
                 self._documents.append(doc_obj)
                 doc_ids.append(final_id)
@@ -194,26 +199,29 @@ class MicroRAG:
         5. Builds FTS index
 
         Must be called after add_documents() and before search().
+        Call it also after you open an existing database file.
         """
-        if not self._documents:
+        if self._documents:
+            docs_needing_embeddings = [d for d in self._documents if d.embedding is None]
+
+            if docs_needing_embeddings:
+                logger.debug(
+                    "Generating embeddings for %d document(s)", len(docs_needing_embeddings)
+                )
+                contents = [d.content for d in docs_needing_embeddings]
+                embeddings = self.embedding_model.encode(contents)
+
+                for doc, embedding in zip(docs_needing_embeddings, embeddings, strict=True):
+                    doc.embedding = embedding
+
+            self.storage.add_documents(self._documents)
+            self._documents.clear()
+
+        if self.storage.count() == 0:
             logger.debug("No documents to index")
             return
 
-        logger.info("Building index for %d document(s)", len(self._documents))
-
-        # Generate embeddings for documents without them
-        docs_needing_embeddings = [d for d in self._documents if d.embedding is None]
-
-        if docs_needing_embeddings:
-            logger.debug("Generating embeddings for %d document(s)", len(docs_needing_embeddings))
-            contents = [d.content for d in docs_needing_embeddings]
-            embeddings = self.embedding_model.encode(contents)
-
-            for doc, embedding in zip(docs_needing_embeddings, embeddings, strict=True):
-                doc.embedding = embedding
-
-        # Store documents
-        self.storage.add_documents(self._documents)
+        logger.info("Building index for %d document(s)", self.storage.count())
 
         # Build HNSW index
         self.storage.build_vector_index(
@@ -225,8 +233,9 @@ class MicroRAG:
         # Build FTS index
         self.storage.build_fts_index()
 
-        # Build BM25 index
-        self.searcher.build_index(self._documents)
+        # Build BM25 index from storage so it also covers documents from earlier sessions
+        # shortcut: also loads embeddings (~2.6s per 20k docs), add an id/content-only query if it matters
+        self.searcher.build_index(self.storage.get_all_documents())
 
         self._index_built = True
         logger.info("Index build complete")
@@ -301,11 +310,12 @@ class MicroRAG:
         self._index_built = False
 
     def close(self) -> None:
-        """Close all resources."""
+        """Close resources other than a caller-supplied embedding model."""
         logger.debug("Closing MicroRAG resources")
         if self._storage is not None:
             self._storage.close()
             self._storage = None
-        self._embedding_model = None
+        self._index_built = False
+        self._embedding_model = self._provided_embedding_model
         self._query_processor = None
         self._searcher = None

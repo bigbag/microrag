@@ -65,9 +65,18 @@ class TestRAGConfig:
 
     def test_with_updates(self):
         """Test creating new config with updates."""
-        config = RAGConfig(model_path="/path/to/model", embedding_dim=384)
+        config = RAGConfig(
+            model_path="/path/to/model",
+            embedding_dim=384,
+            abbreviations={"ML": "machine learning"},
+        )
         new_config = config.with_updates(embedding_dim=768, db_path="./new.duckdb")
 
         assert config.embedding_dim == 384  # Original unchanged
         assert new_config.embedding_dim == 768
         assert new_config.db_path == "./new.duckdb"
+
+        new_config.abbreviations["ML"] = "maximum likelihood"
+        assert config.abbreviations == {"ML": "machine learning"}
+        replacement = config.with_updates(abbreviations={"AI": "artificial intelligence"})
+        assert replacement.abbreviations == {"AI": "artificial intelligence"}

@@ -1,5 +1,8 @@
 """Test fixtures for MicroRAG."""
 
+from collections.abc import Iterator
+from contextlib import closing
+from hashlib import sha256
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -69,9 +72,10 @@ def sample_documents() -> list[Document]:
 
 
 @pytest.fixture
-def storage() -> DuckDBStorage:
+def storage() -> Iterator[DuckDBStorage]:
     """Create in-memory DuckDB storage."""
-    return DuckDBStorage(db_path=":memory:", embedding_dim=TEST_EMBEDDING_DIM)
+    with closing(DuckDBStorage(db_path=":memory:", embedding_dim=TEST_EMBEDDING_DIM)) as storage:
+        yield storage
 
 
 @pytest.fixture
@@ -99,14 +103,15 @@ def mock_embedding_model():
     mock.embedding_dim = TEST_EMBEDDING_DIM
 
     def encode_side_effect(texts, normalize=True):
-        np.random.seed(hash(str(texts)) % 2**32)
         if isinstance(texts, str):
             texts = [texts]
-        return np.random.rand(len(texts), TEST_EMBEDDING_DIM).astype(np.float32)
+        return np.array(
+            [encode_single_side_effect(text, normalize) for text in texts], dtype=np.float32
+        ).reshape(len(texts), TEST_EMBEDDING_DIM)
 
     def encode_single_side_effect(text, normalize=True):
-        np.random.seed(hash(text) % 2**32)
-        return np.random.rand(TEST_EMBEDDING_DIM).astype(np.float32)
+        seed = int.from_bytes(sha256(text.encode()).digest()[:8], "little")
+        return np.random.default_rng(seed).random(TEST_EMBEDDING_DIM, dtype=np.float32)
 
     mock.encode.side_effect = encode_side_effect
     mock.encode_single.side_effect = encode_single_side_effect
@@ -126,8 +131,7 @@ def rag_config() -> RAGConfig:
 
 
 @pytest.fixture
-def rag_with_mock_embeddings(rag_config: RAGConfig, mock_embedding_model):
+def rag_with_mock_embeddings(rag_config: RAGConfig, mock_embedding_model) -> Iterator[MicroRAG]:
     """Create MicroRAG instance with mocked embedding model."""
-    rag = MicroRAG(rag_config)
-    rag._embedding_model = mock_embedding_model
-    return rag
+    with MicroRAG(rag_config, embedding_model=mock_embedding_model) as rag:
+        yield rag

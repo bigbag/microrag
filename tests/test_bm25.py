@@ -31,7 +31,10 @@ class TestBM25Index:
 
     def test_search_edge_cases(self, bm25_index: BM25Index):
         """Test search edge cases."""
-        bm25_index.build(["doc1"], ["Machine learning"])
+        bm25_index.build(
+            ["doc1", "doc2", "doc3"],
+            ["Machine learning", "Cooking pasta", "Garden flowers"],
+        )
 
         # Empty query
         assert bm25_index.search("", top_k=3) == []
@@ -40,6 +43,9 @@ class TestBM25Index:
         # Search before build
         empty_index = BM25Index(bm25_index._query_processor)
         assert empty_index.search("query", top_k=3) == []
+
+        bm25_index.build(["doc1"], ["the and or"])
+        assert bm25_index.search("machine", top_k=3) == []
 
     def test_build_validation(self, bm25_index: BM25Index):
         """Test that mismatched doc_ids and documents raises error."""

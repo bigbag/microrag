@@ -53,6 +53,12 @@ class TestChunkText:
             stripped = chunk.rstrip()
             assert stripped.endswith(".")
 
+    def test_large_overlap_does_not_move_backward(self):
+        """Test that a chunk never starts before the previous chunk start."""
+        sentence = "a" * 82 + ". "
+        chunks = chunk_text(sentence * 20, chunk_size=100, chunk_overlap=95)
+        assert chunks == [sentence] * 20
+
 
 class TestNormalizeDocumentInput:
     """Tests for normalize_document_input function."""
